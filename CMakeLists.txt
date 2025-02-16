@@ -12,9 +12,9 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(googletest)
 
-include_directories(${CMAKE_SOURCE_DIR})
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
-add_executable(tests test.cpp)
+add_executable(tests src/test.cpp)
 
 target_link_libraries(
   tests
