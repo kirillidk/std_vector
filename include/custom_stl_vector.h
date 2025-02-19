@@ -8,25 +8,43 @@ namespace kirillidk_containers {
 template <typename T>
 class vector {
 public:
+    /*** Named requirements for containers ***/
+    typedef T value_type;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef std::size_t size_type;
+public:
+    /*** Constructors ***/
     vector();
+    explicit vector(size_type __count);
     vector(const vector<T>& __other);
+
+    /*** Destructor ***/
     ~vector();
+
     vector<T>& operator=(const vector<T>& __other);
 
-    void reserve(std::size_t __capacity);
-    void push_back(const T& __value);
+    /*** Element access ***/
+    reference operator[](size_type __index);
+    const_reference operator[](size_type __index) const;
 
-    std::size_t size() const noexcept;
-    std::size_t capacity() const noexcept;
+    /*** Capacity ***/
+    bool empty() const noexcept;
+    size_type size() const noexcept;
+    size_type capacity() const noexcept;
+    void reserve(size_type __capacity);
 
-    T& operator[](std::size_t __index);
-    const T& operator[](std::size_t __index) const;
+    /*** Modifiers ***/
+    void clear();
+    void push_back(const_reference __value);
+    void pop_back();
+    void resize(size_type __count);
 private:
     void _M_swap(vector<T>& __other);
 
     T* _M_arr;
-    std::size_t _M_size;
-    std::size_t _M_capacity;
+    size_type _M_size;
+    size_type _M_capacity;
 };
 
 /**
@@ -34,6 +52,25 @@ private:
  */
 template <typename T>
 vector<T>::vector() : _M_arr(nullptr), _M_size(0), _M_capacity(0) {}
+
+/**
+ * @brief Constructs a vector with __count default-inserted objects of T
+ * @param __count The number of default-inserted objects to create in the vector
+ * @note T should be DefaultInsertible into std::vector<T>, otherwise behaviour
+ * is undefined
+ */
+template <typename T>
+vector<T>::vector(size_type __count) {
+    T* __new_arr = reinterpret_cast<T*>(new char[sizeof(T) * __count]);
+
+    for (size_type i = 0; i < __count; ++i) {
+        new (__new_arr + i) T();
+    }
+
+    _M_arr = __new_arr;
+    _M_size = __count;
+    _M_capacity = __count;
+}
 
 /**
  * @brief Сopy constructor
@@ -44,7 +81,7 @@ vector<T>::vector(const vector<T>& __other) {
     T* __new_arr =
         reinterpret_cast<T*>(new char[sizeof(T) * __other._M_capacity]);
 
-    for (std::size_t i = 0; i < __other._M_size; ++i) {
+    for (size_type i = 0; i < __other._M_size; ++i) {
         new (__new_arr + i) T(__other._M_arr[i]);
     }
 
@@ -58,7 +95,7 @@ vector<T>::vector(const vector<T>& __other) {
  */
 template <typename T>
 vector<T>::~vector() {
-    for (std::size_t i = 0; i < _M_size; ++i) {
+    for (size_type i = 0; i < _M_size; ++i) {
         (_M_arr + i)->~T();
     }
 
@@ -87,17 +124,17 @@ vector<T>& vector<T>::operator=(const vector<T>& __other) {
  * current capacity
  */
 template <typename T>
-void vector<T>::reserve(std::size_t __capacity) {
+void vector<T>::reserve(size_type __capacity) {
     if (__capacity <= _M_capacity) {
         return;
     }
     T* __new_arr = reinterpret_cast<T*>(new char[sizeof(T) * __capacity]);
 
-    for (std::size_t i = 0; i < _M_size; ++i) {
+    for (size_type i = 0; i < _M_size; ++i) {
         new (__new_arr + i) T(_M_arr[i]);
     }
 
-    for (std::size_t i = 0; i < _M_size; ++i) {
+    for (size_type i = 0; i < _M_size; ++i) {
         (_M_arr + i)->~T();
     }
 
@@ -108,13 +145,24 @@ void vector<T>::reserve(std::size_t __capacity) {
 }
 
 /**
+ * @brief Erases all elements from the container
+ */
+template <typename T>
+void vector<T>::clear() {
+    for (size_type i = 0; i < _M_size; ++i) {
+        (_M_arr + i)->~T();
+    }
+    _M_size = 0;
+}
+
+/**
  * @brief Appends the given element value to the end of the container
  * @param __value A const reference to an element
  * @note If the current size reaches the capacity of the vector,
  *       the vector will reallocate, doubling its capacity
  */
 template <typename T>
-void vector<T>::push_back(const T& __value) {
+void vector<T>::push_back(const_reference __value) {
     if (_M_size == _M_capacity) {
         reserve(_M_capacity ? 2 * _M_capacity : 1);
     }
@@ -123,10 +171,54 @@ void vector<T>::push_back(const T& __value) {
 }
 
 /**
+ * @brief Removes the last element of the container
+ * @note Calling pop_back on an empty container results in undefined behavior
+ */
+template <typename T>
+void vector<T>::pop_back() {
+    (_M_arr + (--_M_size))->~T();
+}
+
+/**
+ * @brief Resizes the container to contain __count elements
+ * @param __count A new size of the container
+ * @note If the current size is greater than __count, the container is reduced
+ * to its first __count elements. If the current size is less than __count, then
+ * additional default-inserted elements are appended
+ */
+template <typename T>
+void vector<T>::resize(size_type __count) {
+    if (__count == _M_size) return;
+    if (__count < _M_size) {
+        for (size_type i = __count; i < _M_size; ++i) {
+            (_M_arr + i)->~T();
+        }
+    } else {
+        if (__count > _M_capacity) {
+            size_type __new_capacity = _M_capacity;
+            while (__count > __new_capacity) __new_capacity *= 2;
+            reserve(__new_capacity);
+        }
+        for (size_type i = _M_size; i < __count; ++i) {
+            new (_M_arr + i) T();
+        }
+    }
+    _M_size = __count;
+}
+
+/**
+ * @brief Checks if the container has no elements
+ */
+template <typename T>
+bool vector<T>::empty() const noexcept {
+    return (_M_size == 0);
+}
+
+/**
  * @brief Returns the number of elements in the container
  */
 template <typename T>
-std::size_t vector<T>::size() const noexcept {
+typename vector<T>::size_type vector<T>::size() const noexcept {
     return _M_size;
 }
 
@@ -135,7 +227,7 @@ std::size_t vector<T>::size() const noexcept {
  * allocated space for
  */
 template <typename T>
-std::size_t vector<T>::capacity() const noexcept {
+typename vector<T>::size_type vector<T>::capacity() const noexcept {
     return _M_capacity;
 }
 
@@ -146,7 +238,7 @@ std::size_t vector<T>::capacity() const noexcept {
  * @note No bounds checking are performed
  */
 template <typename T>
-T& vector<T>::operator[](std::size_t __index) {
+typename vector<T>::reference vector<T>::operator[](size_type __index) {
     return _M_arr[__index];
 }
 
@@ -157,7 +249,8 @@ T& vector<T>::operator[](std::size_t __index) {
  * @note No bounds checking are performed
  */
 template <typename T>
-const T& vector<T>::operator[](std::size_t __index) const {
+typename vector<T>::const_reference vector<T>::operator[](size_type __index
+) const {
     return _M_arr[__index];
 }
 
