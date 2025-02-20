@@ -36,7 +36,7 @@ public:
 
     /*** Modifiers ***/
     void clear();
-    void push_back(const_reference __value);
+    void push_back(const T& __value);
     void pop_back();
     void resize(size_type __count);
 private:
@@ -162,7 +162,7 @@ void vector<T>::clear() {
  *       the vector will reallocate, doubling its capacity
  */
 template <typename T>
-void vector<T>::push_back(const_reference __value) {
+void vector<T>::push_back(const T& __value) {
     if (_M_size == _M_capacity) {
         reserve(_M_capacity ? 2 * _M_capacity : 1);
     }
