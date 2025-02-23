@@ -8,35 +8,35 @@ namespace kirillidk_containers {
 template <typename T>
 class vector {
 public:
-    /*** Named requirements for containers ***/
+    // types
     typedef T value_type;
     typedef T& reference;
     typedef const T& const_reference;
     typedef std::size_t size_type;
 public:
-    /*** Constructors ***/
+    // construct/copy/destroy
     vector();
     explicit vector(size_type __count);
     vector(const vector<T>& __other);
-
-    /*** Destructor ***/
+    vector(vector<T>&& __other);
     ~vector();
-
     vector<T>& operator=(const vector<T>& __other);
+    vector<T>& operator=(vector<T>&& __other);
 
-    /*** Element access ***/
-    reference operator[](size_type __index);
-    const_reference operator[](size_type __index) const;
-
-    /*** Capacity ***/
+    // capacity
     bool empty() const noexcept;
     size_type size() const noexcept;
     size_type capacity() const noexcept;
     void reserve(size_type __capacity);
 
-    /*** Modifiers ***/
+    // element access
+    reference operator[](size_type __index);
+    const_reference operator[](size_type __index) const;
+
+    // modifiers
     void clear();
     void push_back(const T& __value);
+    void push_back(T&& __value);
     void pop_back();
     void resize(size_type __count);
 private:
@@ -91,6 +91,22 @@ vector<T>::vector(const vector<T>& __other) {
 }
 
 /**
+ * @brief Move constructor
+ * @param __other A r-value reference to another vector to construct from
+ * @note Moves __other's content into new container. __other is in a valid but
+ * unspecified state afterwards
+ */
+template <typename T>
+vector<T>::vector(vector<T>&& __other)
+    : _M_arr(__other._M_arr),
+      _M_size(__other._M_size),
+      _M_capacity(__other._M_capacity) {
+    __other._M_arr = nullptr;
+    __other._M_size = 0;
+    __other._M_capacity = 0;
+}
+
+/**
  * @brief Destructor
  */
 template <typename T>
@@ -103,8 +119,8 @@ vector<T>::~vector() {
 }
 
 /**
- * @brief Replaces the contents of the container
- * @param __other Another container to use as data source
+ * @brief Copy assignment operator
+ * @param __other A const reference to another container
  * @return A reference to current container
  */
 template <typename T>
@@ -114,6 +130,35 @@ vector<T>& vector<T>::operator=(const vector<T>& __other) {
     }
     vector<T> tmp(__other);
     _M_swap(tmp);
+    return *this;
+}
+
+/**
+ * @brief Move assignment operator
+ * @param __other A r-value reference to another vector to construct from
+ * @return A reference to current container
+ * @note Moves __other's content into this container. __other is in a valid but
+ * unspecified state afterwards
+ */
+template <typename T>
+vector<T>& vector<T>::operator=(vector<T>&& __other) {
+    if (this == &__other) {
+        return *this;
+    }
+
+    for (size_type i = 0; i < _M_size; ++i) {
+        (_M_arr + i)->~T();
+    }
+    delete[] reinterpret_cast<char*>(_M_arr);
+
+    _M_arr = __other._M_arr;
+    _M_size = __other._M_size;
+    _M_capacity = __other._M_capacity;
+
+    __other._M_arr = nullptr;
+    __other._M_size = 0;
+    __other._M_capacity = 0;
+
     return *this;
 }
 
@@ -167,6 +212,15 @@ void vector<T>::push_back(const T& __value) {
         reserve(_M_capacity ? 2 * _M_capacity : 1);
     }
     new (_M_arr + _M_size) T(__value);
+    ++_M_size;
+}
+
+template <typename T>
+void vector<T>::push_back(T&& __value) {
+    if (_M_size == _M_capacity) {
+        reserve(_M_capacity ? 2 * _M_capacity : 1);
+    }
+    new (_M_arr + _M_size) T(std::move(__value));
     ++_M_size;
 }
 

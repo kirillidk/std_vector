@@ -1,51 +1,43 @@
 #include <custom_stl_vector.h>
 #include <gtest/gtest.h>
 
+#include <string>
+
 class Product {
 public:
-    Product() : name_(nullptr), quantity_(0), price_(0.0) {}
-    Product(const char* name, int quantity, double price)
-        : quantity_(quantity), price_(price) {
-        if (name) {
-            name_ = new char[strlen(name) + 1];
-            strcpy(name_, name);
-        } else {
-            name_ = nullptr;
-        }
+    Product() : name_("Untitled"), quantity_(0), price_(0) {}
+    Product(const std::string& name, int quantity, double price)
+        : name_(name), quantity_(quantity), price_(price) {}
+    Product(const Product& other) = default;
+    Product& operator=(const Product& other) = default;
+    Product(Product&& other)
+        : name_(std::move(other.name_)),
+          quantity_(other.quantity_),
+          price_(other.price_) {
+        other.quantity_ = 0;
+        other.price_ = 0;
     }
-    Product(const Product& other) {
-        if (other.name_) {
-            name_ = new char[strlen(other.name_) + 1];
-            strcpy(name_, other.name_);
-        } else {
-            name_ = nullptr;
-        }
-        quantity_ = other.quantity_;
-        price_ = other.price_;
-    }
-    Product& operator=(const Product& other) {
+    Product& operator=(Product&& other) {
         if (this == &other) {
             return *this;
         }
 
-        Product tmp(other);
-        swap_(tmp);
+        name_ = std::move(other.name_);
+        quantity_ = other.quantity_;
+        price_ = other.price_;
+
+        other.quantity_ = 0;
+        other.price_ = 0.0;
+
         return *this;
     }
-    ~Product() { delete[] name_; }
     bool operator==(const Product& other) const {
-        return (strcmp(name_, other.name_) == 0) &&
-               (quantity_ == other.quantity_) && (price_ == other.price_);
+        return (name_ == other.name_) && (quantity_ == other.quantity_) &&
+               (price_ == other.price_);
     }
 private:
-    void swap_(Product& other) {
-        std::swap(name_, other.name_);
-        std::swap(quantity_, other.quantity_);
-        std::swap(price_, other.price_);
-    }
-
-    char* name_;
-    int quantity_;
+    std::string name_;
+    std::int32_t quantity_;
     double price_;
 };
 
@@ -70,7 +62,28 @@ TEST(VectorTest, Constructors) {
     EXPECT_EQ(v3[1], Product("Product2", 5, 15.0));
 }
 
-TEST(VectorTest, AssignmentOperator) {
+TEST(VectorTest, MoveConstructor) {
+    kirillidk_containers::vector<Product> v;
+    v.push_back(Product("Product1", 10, 20.5));
+    v.push_back(Product("Product2", 5, 15.0));
+
+    kirillidk_containers::vector<Product> moved_vector(std::move(v));
+
+    EXPECT_EQ(v.size(), 0);
+    EXPECT_EQ(v.capacity(), 0);
+
+    EXPECT_EQ(moved_vector.size(), 2);
+    EXPECT_EQ(moved_vector[0], Product("Product1", 10, 20.5));
+    EXPECT_EQ(moved_vector[1], Product("Product2", 5, 15.0));
+
+    v.push_back(Product("Product1", 10, 20.5));
+    v.push_back(Product("Product2", 5, 15.0));
+
+    EXPECT_EQ(v.size(), 2);
+    EXPECT_EQ(v.capacity(), 2);
+}
+
+TEST(VectorTest, CopyAssignmentOperator) {
     kirillidk_containers::vector<Product> v1;
     v1.push_back(Product("Product1", 10, 20.5));
     v1.push_back(Product("Product2", 5, 15.0));
@@ -87,6 +100,56 @@ TEST(VectorTest, AssignmentOperator) {
     EXPECT_EQ(v1.size(), 2);
     EXPECT_EQ(v1[0], Product("Product1", 10, 20.5));
     EXPECT_EQ(v1[1], Product("Product2", 5, 15.0));
+}
+
+TEST(VectorTest, MoveAssignmentOperator) {
+    kirillidk_containers::vector<Product> v1;
+    v1.push_back(Product("Product3", 8, 12.5));
+    v1.push_back(Product("Product4", 2, 5.0));
+
+    kirillidk_containers::vector<Product> v2;
+    v2.push_back(Product("OldProduct", 1, 1.0));
+
+    v2 = std::move(v1);
+
+    EXPECT_EQ(v1.size(), 0);
+    EXPECT_EQ(v1.capacity(), 0);
+
+    EXPECT_EQ(v2.size(), 2);
+    EXPECT_EQ(v2[0], Product("Product3", 8, 12.5));
+    EXPECT_EQ(v2[1], Product("Product4", 2, 5.0));
+}
+
+TEST(VectorTest, PushBackOverloads) {
+    kirillidk_containers::vector<Product> v;
+
+    Product product1("Product1", 10, 20.5);
+    v.push_back(product1);
+
+    EXPECT_EQ(product1, Product("Product1", 10, 20.5));
+    EXPECT_EQ(v.size(), 1);
+    EXPECT_EQ(v[0], Product("Product1", 10, 20.5));
+
+    Product product2("Product2", 5, 15.0);
+    v.push_back(std::move(product2));
+
+    EXPECT_EQ(product2, Product("", 0, 0.0));
+
+    EXPECT_EQ(v.size(), 2);
+    EXPECT_EQ(v[1], Product("Product2", 5, 15.0));
+
+    v.push_back(Product("TempProduct", 3, 7.5));
+    EXPECT_EQ(v.size(), 3);
+    EXPECT_EQ(v[2], Product("TempProduct", 3, 7.5));
+
+    v.reserve(1);
+    v.push_back(Product("AnotherProduct", 1, 1.0));
+
+    ASSERT_EQ(v.size(), 4);
+    EXPECT_EQ(v[0], Product("Product1", 10, 20.5));
+    EXPECT_EQ(v[1], Product("Product2", 5, 15.0));
+    EXPECT_EQ(v[2], Product("TempProduct", 3, 7.5));
+    EXPECT_EQ(v[3], Product("AnotherProduct", 1, 1.0));
 }
 
 TEST(VectorTest, ElementAccess) {
