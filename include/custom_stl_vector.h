@@ -2,6 +2,7 @@
 
 #include <algorithm>  // std::swap
 #include <cstddef>    // std::size_t
+#include <utility>    // std::move, std::move_if_noexcept
 
 namespace kirillidk_containers {
 
@@ -18,10 +19,10 @@ public:
     vector();
     explicit vector(size_type __count);
     vector(const vector<T>& __other);
-    vector(vector<T>&& __other);
+    vector(vector<T>&& __other) noexcept;
     ~vector();
     vector<T>& operator=(const vector<T>& __other);
-    vector<T>& operator=(vector<T>&& __other);
+    vector<T>& operator=(vector<T>&& __other) noexcept;
 
     // capacity
     bool empty() const noexcept;
@@ -63,8 +64,8 @@ template <typename T>
 vector<T>::vector(size_type __count) {
     T* __new_arr = reinterpret_cast<T*>(new char[sizeof(T) * __count]);
 
-    for (size_type i = 0; i < __count; ++i) {
-        new (__new_arr + i) T();
+    for (size_type __i = 0; __i < __count; ++__i) {
+        new (__new_arr + __i) T();
     }
 
     _M_arr = __new_arr;
@@ -81,8 +82,8 @@ vector<T>::vector(const vector<T>& __other) {
     T* __new_arr =
         reinterpret_cast<T*>(new char[sizeof(T) * __other._M_capacity]);
 
-    for (size_type i = 0; i < __other._M_size; ++i) {
-        new (__new_arr + i) T(__other._M_arr[i]);
+    for (size_type __i = 0; __i < __other._M_size; ++__i) {
+        new (__new_arr + __i) T(__other._M_arr[__i]);
     }
 
     _M_arr = __new_arr;
@@ -97,7 +98,7 @@ vector<T>::vector(const vector<T>& __other) {
  * unspecified state afterwards
  */
 template <typename T>
-vector<T>::vector(vector<T>&& __other)
+vector<T>::vector(vector<T>&& __other) noexcept
     : _M_arr(__other._M_arr),
       _M_size(__other._M_size),
       _M_capacity(__other._M_capacity) {
@@ -111,8 +112,8 @@ vector<T>::vector(vector<T>&& __other)
  */
 template <typename T>
 vector<T>::~vector() {
-    for (size_type i = 0; i < _M_size; ++i) {
-        (_M_arr + i)->~T();
+    for (size_type __i = 0; __i < _M_size; ++__i) {
+        (_M_arr + __i)->~T();
     }
 
     delete[] reinterpret_cast<char*>(_M_arr);
@@ -128,8 +129,8 @@ vector<T>& vector<T>::operator=(const vector<T>& __other) {
     if (this == &__other) {
         return *this;
     }
-    vector<T> tmp(__other);
-    _M_swap(tmp);
+    vector<T> __tmp(__other);
+    _M_swap(__tmp);
     return *this;
 }
 
@@ -141,13 +142,13 @@ vector<T>& vector<T>::operator=(const vector<T>& __other) {
  * unspecified state afterwards
  */
 template <typename T>
-vector<T>& vector<T>::operator=(vector<T>&& __other) {
+vector<T>& vector<T>::operator=(vector<T>&& __other) noexcept {
     if (this == &__other) {
         return *this;
     }
 
-    for (size_type i = 0; i < _M_size; ++i) {
-        (_M_arr + i)->~T();
+    for (size_type __i = 0; __i < _M_size; ++__i) {
+        (_M_arr + __i)->~T();
     }
     delete[] reinterpret_cast<char*>(_M_arr);
 
@@ -175,12 +176,22 @@ void vector<T>::reserve(size_type __capacity) {
     }
     T* __new_arr = reinterpret_cast<T*>(new char[sizeof(T) * __capacity]);
 
-    for (size_type i = 0; i < _M_size; ++i) {
-        new (__new_arr + i) T(_M_arr[i]);
+    size_type __i = 0;
+    try {
+        for (; __i < _M_size; ++__i) {
+            new (__new_arr + __i) T(std::move_if_noexcept(_M_arr[__i]));
+        }
+    } catch (...) {
+        for (size_type __new_i = 0; __new_i < __i; ++__new_i) {
+            (__new_arr + __i)->~T();
+        }
+        delete[] reinterpret_cast<char*>(__new_arr);
+
+        throw;
     }
 
-    for (size_type i = 0; i < _M_size; ++i) {
-        (_M_arr + i)->~T();
+    for (size_type __i = 0; __i < _M_size; ++__i) {
+        (_M_arr + __i)->~T();
     }
 
     delete[] reinterpret_cast<char*>(_M_arr);
@@ -194,8 +205,8 @@ void vector<T>::reserve(size_type __capacity) {
  */
 template <typename T>
 void vector<T>::clear() {
-    for (size_type i = 0; i < _M_size; ++i) {
-        (_M_arr + i)->~T();
+    for (size_type __i = 0; __i < _M_size; ++__i) {
+        (_M_arr + __i)->~T();
     }
     _M_size = 0;
 }
@@ -209,18 +220,74 @@ void vector<T>::clear() {
 template <typename T>
 void vector<T>::push_back(const T& __value) {
     if (_M_size == _M_capacity) {
-        reserve(_M_capacity ? 2 * _M_capacity : 1);
+        size_type __new_cap = _M_capacity ? 2 * _M_capacity : 1;
+        T* __new_arr = reinterpret_cast<T*>(new char[sizeof(T) * __new_cap]);
+
+        size_type __i = 0;
+        try {
+            new (__new_arr + _M_size) T(__value);
+            for (; __i < _M_size; ++__i) {
+                new (__new_arr + __i) T(std::move_if_noexcept(_M_arr[__i]));
+            }
+        } catch (...) {
+            size_type __new_i = 0;
+            for (; __new_i < __i; ++__new_i) {
+                (__new_arr + __new_i)->~T();
+            }
+
+            delete[] reinterpret_cast<char*>(__new_arr);
+
+            throw;
+        }
+
+        for (size_type __i = 0; __i < _M_size; ++__i) {
+            (_M_arr + __i)->~T();
+        }
+
+        delete[] reinterpret_cast<char*>(_M_arr);
+
+        _M_arr = __new_arr;
+        _M_capacity = __new_cap;
+    } else {
+        new (_M_arr + _M_size) T(__value);
     }
-    new (_M_arr + _M_size) T(__value);
     ++_M_size;
 }
 
 template <typename T>
 void vector<T>::push_back(T&& __value) {
     if (_M_size == _M_capacity) {
-        reserve(_M_capacity ? 2 * _M_capacity : 1);
+        size_type __new_cap = _M_capacity ? 2 * _M_capacity : 1;
+        T* __new_arr = reinterpret_cast<T*>(new char[sizeof(T) * __new_cap]);
+
+        size_type __i = 0;
+        try {
+            new (__new_arr + _M_size) T(std::move(__value));
+            for (; __i < _M_size; ++__i) {
+                new (__new_arr + __i) T(std::move_if_noexcept(_M_arr[__i]));
+            }
+        } catch (...) {
+            size_type __new_i = 0;
+            for (; __new_i < __i; ++__new_i) {
+                (__new_arr + __new_i)->~T();
+            }
+
+            delete[] reinterpret_cast<char*>(__new_arr);
+
+            throw;
+        }
+
+        for (size_type __i = 0; __i < _M_size; ++__i) {
+            (_M_arr + __i)->~T();
+        }
+
+        delete[] reinterpret_cast<char*>(_M_arr);
+
+        _M_arr = __new_arr;
+        _M_capacity = __new_cap;
+    } else {
+        new (_M_arr + _M_size) T(std::move(__value));
     }
-    new (_M_arr + _M_size) T(std::move(__value));
     ++_M_size;
 }
 
@@ -244,8 +311,8 @@ template <typename T>
 void vector<T>::resize(size_type __count) {
     if (__count == _M_size) return;
     if (__count < _M_size) {
-        for (size_type i = __count; i < _M_size; ++i) {
-            (_M_arr + i)->~T();
+        for (size_type __i = __count; __i < _M_size; ++__i) {
+            (_M_arr + __i)->~T();
         }
     } else {
         if (__count > _M_capacity) {
@@ -253,8 +320,8 @@ void vector<T>::resize(size_type __count) {
             while (__count > __new_capacity) __new_capacity *= 2;
             reserve(__new_capacity);
         }
-        for (size_type i = _M_size; i < __count; ++i) {
-            new (_M_arr + i) T();
+        for (size_type __i = _M_size; __i < __count; ++__i) {
+            new (_M_arr + __i) T();
         }
     }
     _M_size = __count;
@@ -314,5 +381,4 @@ void vector<T>::_M_swap(vector<T>& __other) {
     std::swap(_M_size, __other._M_size);
     std::swap(_M_capacity, __other._M_capacity);
 }
-
 }
